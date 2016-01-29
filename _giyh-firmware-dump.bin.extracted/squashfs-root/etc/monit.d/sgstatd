@@ -1,0 +1,6 @@
+check process sgstatd with pidfile /var/run/sgstatd.pid
+group root
+start program = "/etc/init.d/sgstatd start"
+stop program = "/etc/init.d/sgstatd stop"
+if failed host 127.0.0.1 port 4242 then restart
+if 5 restarts within 5 cycles then timeout

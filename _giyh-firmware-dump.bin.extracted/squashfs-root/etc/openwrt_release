@@ -1,0 +1,7 @@
+DISTRIB_ID='OpenWrt'
+DISTRIB_RELEASE='Bleeding Edge'
+DISTRIB_REVISION='r47650'
+DISTRIB_CODENAME='designated_driver'
+DISTRIB_TARGET='realview/generic'
+DISTRIB_DESCRIPTION='OpenWrt Designated Driver r47650'
+DISTRIB_TAINTS=''

@@ -1,0 +1,17 @@
+extends layout
+
+block content
+  h1 GnomeNET
+  h2 Current GnomeNET Messages
+  if session.user_level > 10
+    table.table.table-striped
+      tr
+        th Message Id
+        th Message
+      if res.gmessages !== undefined
+        each msg in res.gmessages
+          tr
+            td= msg.id
+            td= msg.msg
+  else
+    h3.message Your user level is too low to view GnomeNET!

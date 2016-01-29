@@ -1,0 +1,14 @@
+#!/bin/sh /etc/rc.common
+# OWNER: STUART
+#  STUART: Startup autowlan connection process
+#  AUGGIE: Function verified, ready for production
+START=90
+
+PROG=/usr/sbin/autowlan
+
+start_service() {
+	$PROG &
+}
+stop_service() {
+	killall autowlan
+}

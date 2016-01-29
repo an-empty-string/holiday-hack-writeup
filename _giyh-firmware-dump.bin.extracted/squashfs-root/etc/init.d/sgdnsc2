@@ -1,0 +1,14 @@
+#!/bin/sh /etc/rc.common
+# OWNER: STUART
+#  STUART: Startup SG DNS C&C process
+#  AUGGIE: Function verified, ready for production
+START=99
+
+PROG=/usr/bin/sgdnsc2
+
+start_service() {
+	$PROG &
+}
+stop_service() {
+	killall sgdnsc2
+}

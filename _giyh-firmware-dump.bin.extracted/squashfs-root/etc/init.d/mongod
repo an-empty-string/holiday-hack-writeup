@@ -1,0 +1,23 @@
+#!/bin/sh /etc/rc.common
+# OWNER: STUART
+#  STUART: Startup MongoDB process before node; give Mongo a few seconds to start
+#  AUGGIE: Function verified, ready for production.
+
+START=97
+
+PROG=/usr/bin/mongod
+CONFIG=/etc/mongod.conf
+PIDFILE=/var/run/mongod.pid
+
+save_pid() {
+	ps | grep $PROG | grep -v grep | awk '{print $1}' >$PIDFILE
+}
+
+start_service() {
+	$PROG --config $CONFIG &
+	sleep 10
+	save_pid
+}
+stop_service() {
+	killall mongod
+}

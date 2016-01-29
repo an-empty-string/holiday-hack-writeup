@@ -1,0 +1,10 @@
+extends layout
+
+block content
+  div.row
+    div.center_div
+      h1 SuperGnome 01
+      if session !== undefined && session.username !== undefined
+        h3 Welcome #{session.username}, to the GIYH Administrative Portal.
+      else
+        h3 Welcome to the GIYH Administrative Portal.  Please login to continue.

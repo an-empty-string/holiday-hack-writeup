@@ -1,0 +1,23 @@
+#!/bin/sh
+# OWNER: STUART
+#  STUART: Automatically discover and connect to WiFi networks
+#  AUGGIE: Functionality verified/ready for production
+
+
+while true; do
+    for SSID in `iwlist wlan0 scan | grep -A1 "Encryption key:off" | grep ESSID: | cut -d: -f2`; do
+        if [ $SSID = "" ] ; then
+            echo "Skipping empty SSID"
+            continue
+        fi
+
+        echo "Trying to connect to $SSID"
+        iw wlan0 connect $SSID
+        udhcpc -n -i wlan0
+        if [ $? -eq 0 ] ; then
+            # We have access
+            exit
+        fi
+    done
+    sleep 10
+done

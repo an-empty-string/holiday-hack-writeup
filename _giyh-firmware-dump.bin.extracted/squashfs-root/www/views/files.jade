@@ -1,0 +1,49 @@
+extends layout
+
+block content
+  h1 Files
+  if res.msgs != undefined
+    each msg in res.msgs
+      p.message= msg
+  h2 Current Files
+  if session.user_level > 10
+    h5 Files location: /gnome/www/files/
+    table.table.table-striped
+      tr
+        th file
+        th size
+        th download
+      if res.files != undefined
+        each file in res.files
+          tr
+            td= file['name']
+            td= file['size']
+            td
+              a(href='/files?d='+file['name']) Download
+    if session.user_level > 100
+      h2 Upload New File
+      form.upload-form.form-horizontal(action='/files', method='post', role='form', enctype='multipart/form-data')
+        div.form-group.form-group-1g
+          h4.col-sm-5 Post-process:
+          div.col-sm-7
+            select.form-control(
+              required=true,
+              name='postproc'
+              )
+              option(value='none') none
+              option(value='postproc("timestamp", file)') timestamp
+              option(value='postproc("darken50", file)') darken 50%
+              option(value='postproc("darken20", file)') darken 20%
+              option(value='postproc("brighten50", file)') brighten 50%
+              option(value='postproc("brighten20", file)') brighten 20%
+        div.form-group
+          h4.col-sm-5 Choose a file:
+          div.col-sm-7
+            input.form-control(required=true,
+              name='file',
+              type='file')
+        div.form-group
+          div.col-sm-offset-6.col-sm-6
+            button.login.btn.btn-primary(type='submit') Upload
+  else
+    h3.message Your user level is too low to view and upload files!  

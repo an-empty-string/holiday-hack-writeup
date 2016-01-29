@@ -1,0 +1,6 @@
+check process nodejs with pidfile /var/run/www.pid
+group root
+start program = "/etc/init.d/nodejs start"
+stop program = "/etc/init.d/nodejs stop"
+if failed host 127.0.0.1 port 80 then restart
+if 5 restarts within 5 cycles then timeout

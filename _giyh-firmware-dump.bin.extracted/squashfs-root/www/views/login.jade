@@ -1,0 +1,31 @@
+extends layout
+
+block content
+  .jumbotron
+    h1 GIYH
+    if session !== undefined && session.logged_in
+      h2 Welcome #{session.username}, to the GIYH Administrative Portal.
+    else
+      h2 Welcome to the GIYH Administrative Portal.  Please login to continue.
+  if session === undefined || session.logged_in == false
+    form.login-form.form-horizontal(method='post', role='form')
+      div.form-group
+        label.col-sm-4 Username
+        div.col-sm-8
+          input.form-control(
+            placeholder='Username',
+            required=true,
+            name='username',
+            type='text',
+            value=username)
+      div.form-group
+        label.col-sm-4 Password
+        div.col-sm-8
+          input.form-control(placeholder='Password',
+            required=true,
+            name='password',
+            type='password',
+            value=password)
+      div.form-group
+        div.col-sm-offset-4.col-sm-8
+          button.login.btn.btn-primary(type='submit') Login

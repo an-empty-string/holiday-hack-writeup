@@ -1,0 +1,21 @@
+#!/bin/sh /etc/rc.common
+# OWNER: STUART
+#  STUART: Startup Node.js process after MongoDB starts
+#  AUGGIE: Function verified, ready for production
+START=98
+
+PROG=/www/bin/www
+PIDFILE=/var/run/www.pid
+
+save_pid() {
+	ps | grep $PROG | grep -v grep | awk '{print $1}' >$PIDFILE
+}
+
+start_service() {
+	$PROG &
+	save_pid
+}
+
+stop_service() {
+	killall www
+}

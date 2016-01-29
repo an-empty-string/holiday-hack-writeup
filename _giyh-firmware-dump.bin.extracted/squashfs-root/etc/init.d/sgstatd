@@ -1,0 +1,25 @@
+#!/bin/sh /etc/rc.common
+# BUGID: 570523-1
+# OWNER: STUART
+#  LOUISE: The sgstatd process fails to start on the Gnome hardware.
+#  LOUISE: I rewrote the startup script, testing in DEV works fine. Closing ticket.
+#  LOUISE changed status from OPEN to CLOSED
+#  AUGGIE: Process still fails to startup, re-opening ticket.
+#  AUGGIE changed status from CLOSED to OPEN
+#  LOUISE: It works just find in DEV Auggie.
+#  NEDFORD: Confirm process fails to startup, delegate to Stuart for resolution.
+#  LOUISE: Status on this Stuart?
+#  NEDFORD changed owner from LOUISE to STUART
+#  NEDFORD: Can we get a status on this Stuart?
+#  NEDFORD: Can we get a status on this Stuart?
+#  LOUISE: Blocking on this ticket, we may have to ship without resolution.
+START=98
+
+PROG=/usr/bin/sgstatd
+
+start_service() {
+	$PROG &
+}
+stop_service() {
+	killall sgstatd
+}

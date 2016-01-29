@@ -1,0 +1,43 @@
+extends layout
+
+block content
+  h1 Settings
+  if res.msgs != undefined
+    each msg in res.msgs
+      p.message= msg
+  h2 Current Settings
+  h4 NOTE: These settings will be pushed to subordinate Gnomes on every poll.
+  if session.user_level > 10
+    table.table.table-striped
+      tr
+        th Setting
+        th Value
+      each setting in res.settings
+        tr
+          td= setting.setting
+          td= setting.value
+    if session.user_level > 100
+      h2 Upload Settings
+      form.upload-form.form-horizontal(method='post', role='form')
+        div.form-group.form-group-1g
+          h4.col-sm-5 Dest filename (e.g. path/file.cfg):
+          div.col-sm-7
+            input.form-control(
+              placeholder='filename',
+              required=true,
+              name='filen',
+              type='text',
+              value=filen)
+        div.form-group
+          h4.col-sm-5 Choose a file:
+          div.col-sm-7
+            input.form-control(placeholder='',
+              required=true,
+              name='file',
+              type='file',
+              value=file)
+        div.form-group
+          div.col-sm-offset-6.col-sm-6
+            button.login.btn.btn-primary(type='submit') Upload
+  else
+    h3.message Your user level is too low to view settings!

@@ -1,0 +1,114 @@
+body {
+  padding: 50px;
+  font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;
+}
+
+a {
+  color: #00B7FF;
+}
+
+.navbar-default {
+  background-color: #e93f33;
+  border-color: #72150f;
+}
+
+.navbar-default {
+  background-image: none;
+  background-image: none;
+  background-image: none;
+  background-image: none;
+  background-image: none;
+  background-image: none;
+  background-repeat: no-repeat;
+  filter: none;
+}
+
+.navbar-default .navbar-nav > li > a:hover, .navbar-default .navbar-nav > li > a:focus {
+  color: #418106;
+  font-weight: strong;
+  background-color: #ffffff;
+}
+
+.navbar-default .navbar-nav>li>a, .navbar-default .navbar-brand {
+  color: #fff;
+}
+.navbar-brand {
+  padding: 0px 15px 0px 15px;
+  margin: 0;
+  background-color: #ffffff;
+}
+
+.logo {
+  width: 100%;
+  position: relative;
+  margin-bottom: -20%;
+  padding: 0;
+}
+
+.navbar-brand img {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  top: 8px;
+}
+
+.navbar-brand:hover {
+  background-color: #418106 !important;
+}
+
+.login-form {
+  margin: 0 auto;
+  width: 75%;
+}
+
+.upload-form{
+  margin: 0 auto;
+  width: 85%;
+}
+
+.message {
+  color: red;
+}
+
+img {
+  padding: 10px;
+}
+
+.cam_img {
+  width: 100%;
+}
+
+.center_div {
+  margin:0 auto;
+  width: 100%;
+  text-align: center;
+}
+
+.cam_div {
+  display: inline-block;
+  position: relative;
+}
+
+.cam_span {
+  position: absolute;
+  top: 11px;
+  left: 11px;
+  width: 100%;
+  color: #fff;
+}
+
+.label_center {
+  margin-top: 10px;
+  margin-bottom: 0px;
+}
+
+.btn-primary {
+  background-image: -webkit-linear-gradient(top,#e93f33 0,#c40d00 100%);
+  background-image: -o-linear-gradient(top,#e93f33 0,#c40d00 100%);
+  background-image: -webkit-gradient(linear,left top,left bottom,from(#e93f33),to(#c40d00));
+  background-image: linear-gradient(to bottom,#e93f33 0,#c40d00 100%);
+  filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#ffe93f33', endColorstr='#ffc40d00', GradientType=0);
+  filter: progid:DXImageTransform.Microsoft.gradient(enabled=false);
+  background-repeat: repeat-x;
+  border-color: #72150f;
+}

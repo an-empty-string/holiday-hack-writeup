@@ -1,0 +1,5 @@
+network.loopback.up='1'
+network.loopback.device='lo'
+network.lan.up='1'
+network.lan.device='eth0'
+network.lan.ifname='br-lan'

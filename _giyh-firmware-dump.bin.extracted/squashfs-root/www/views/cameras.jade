@@ -1,0 +1,50 @@
+extends layout
+
+block content
+  div.row
+    h1 Cameras
+    if res.msgs !== undefined && res.msgs.length > 0
+      each msg in res.msgs
+        h3.message= msg
+  div.row
+    each camera in res.cameras
+      div.col-md-4
+        div.cam_div
+          img(class="cam_img" src="/cam?camera=" + camera.cameraid)
+  div.row.center_div
+    if res.page === undefined || res.page == 1
+      &gt;
+    a(href="cameras?p=1") 1
+    if res.page === undefined || res.page == 1
+      &lt;
+    &nbsp;&nbsp;
+    if res.page == 2
+      &gt;
+    a(href="cameras?p=2") 2
+    if res.page == 2
+      &lt;
+    &nbsp;&nbsp;
+    if res.page == 3
+      &gt;
+    a(href="cameras?p=3") 3
+    if res.page == 3
+      &lt;
+    &nbsp;&nbsp;
+    if res.page == 4
+      &gt;
+    a(href="cameras?p=4") 4
+    if res.page == 4
+      &lt;
+    &nbsp;&nbsp;
+    if res.page == 5
+      &gt;
+    a(href="cameras?p=5") 5
+    if res.page == 5
+      &lt;
+    &nbsp;&nbsp;...
+    &nbsp;&nbsp;
+    if res.page == 333334
+      &gt;
+    a(href="cameras?p=333334") 333,334
+    if res.page == 333334
+      &lt;
